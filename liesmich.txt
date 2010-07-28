@@ -1,0 +1,38 @@
+Btrieve File Saver 
+------------------
+
+Btrieve File Saver ist ein daten Wiederherstellungstool verfügbar für 
+windows 32/64 Bit und als source inklusive make file zum erstellen
+einer linux version
+
+Hauptfeature von Btrieve File Saver:
+   - data wiederherstellung von btrieve Dateien der Version 3/4/5/6/7/8/9.0 (9.5 geplahnt)
+   - liest und dump's Daten selbst wenn Btrieve selbst die Daten nicht mehr lesen kann
+   - unterstützt variable Datensätze
+   - unterstützt alle möglichen page size Grössen
+   - Batch integration möglich
+   - Silent Mode (arbeitet in Batchmode ohne notwendige interaktion)
+   - CRC support zur Datenverifizierung
+   - Speichert Daten in BUTIL -save Format oder HEX (mit oder ohne Längenangaben oder CRC Information)
+
+
+
+-------------------
+Lizense
+    Copyright (C)2010 dbcoretech ltd. BtrieveFileSaver@dbcoretech.com
+    
+    BtrieveFileSaver is frei Software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    BtrieveFileSaver is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with BtrieveFileSaver.  If not, see <http://www.gnu.org/licenses/>.
+
+-------------------
+End of document
