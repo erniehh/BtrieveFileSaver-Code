@@ -28,12 +28,38 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
-#include <conio.h>
 
 
 #ifdef _WIN32
 #include <windows.h>
-#endif /* _WIN32 */
+#include <conio.h>
+#else /* _WIN32 */
+
+#ifndef TRUE
+	#define TRUE 1
+	#define FALSE 0
+#endif
+
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <ctype.h>
+#include <termios.h>
+
+char *strupr(const char *s)
+{
+	char *r = (char *) malloc (strlen (s) + 1);
+	char *res = r;
+	while (*s)
+		*r++ = toupper (*s++);
+	return res;
+}
+
+int getch()
+{
+   return getchar();
+}
+
+#endif
 
 #include "BtrieveFileSaverLib.h"
 
@@ -87,6 +113,9 @@ static const struct option known_options[] = {
 #define	MAX_REC_BUFFER_SIZE			64000	// data container size
 #define	MAX_FILE_BUFFER_SIZE		1024	// file I/O buffer
 #define	DEBUG_MGS_PREFIX			"*** Btrieve File Saver debug *** "
+#ifndef PATH_MAX 
+	#define PATH_MAX				256
+#endif
 
 /*
  * Visual Studio 6 does not know __func__ or __FUNCTION__
@@ -100,8 +129,8 @@ static const struct option known_options[] = {
 #endif /* _MSC_VER */
 
 /* global variables */
-char				inFileName[_MAX_PATH]	= {0x00};
-char				outFileName[_MAX_PATH]	= {0x00};
+char				inFileName[PATH_MAX]	= {0x00};
+char				outFileName[PATH_MAX]	= {0x00};
 char				format					= 0x00;
 char				*fBuffer				= NULL;
 char				silent_mode				= FALSE;
@@ -112,9 +141,8 @@ static void signal_handler(int sig_num)
 {
 #if !defined(_WIN32)
 	if (sig_num == SIGCHLD) {
-		do {
-		} while (waitpid(-1, &sig_num, WNOHANG) > 0);
-	} else
+		while (waitpid(-1, &sig_num, WNOHANG) > 0);
+	} 
 #else /* !_WIN32 */
 	exit(EXIT_FAILURE);
 #endif 
@@ -180,7 +208,7 @@ static enum error_t set_input_file(const char *fName)
 	if (strlen(fName) <= 0){
 		printf ("No input file name provided\n"); 
 		return (BFS_ERROR);
-	}else if (strlen(fName) > _MAX_PATH){
+	}else if (strlen(fName) > PATH_MAX){
 		printf ("Invalid input file name (to long?)\n"); 
 		return (BFS_ERROR);
 	}else 
@@ -193,7 +221,7 @@ static enum error_t set_output_file(const char *fName)
 	if (strlen(fName) <= 0){
 		printf ("No output file name provided\n"); 
 		return (BFS_ERROR);
-	}else if (strlen(fName) > _MAX_PATH){
+	}else if (strlen(fName) > PATH_MAX){
 		printf ("Invalid output file name (to long?)\n"); 
 		return (BFS_ERROR);
 	}else 
@@ -215,7 +243,8 @@ static enum error_t set_format(const char *f)
 
 static enum error_t set_silent_mode (const char *f)
 {
-	if (strlen(strupr((char*)f)) > 1 
+	strupr((char*)f); // convert to upper case
+	if (strlen(f) > 1 
 	&& ((strcmp(f,"TRUE")) != 0 && (strcmp(f,"FALSE")) != 0)){
 		printf ("Invalid silent mode specified\n"); 
 		return (BFS_ERROR);
@@ -315,7 +344,7 @@ static void dump_record(char *buffer, unsigned long int len)
 	if (!outFile || !fBuffer) return;
 	switch (format){
 		case '1':{ // BUTIL - save format
-			sprintf(fBuffer, "%u,", len );      
+			sprintf(fBuffer, "%u,", (unsigned int)len );      
 			fwrite (fBuffer, strlen (fBuffer), 1, outFile);
 			fwrite (buffer,1, len,outFile);
 			strcpy (fBuffer, "\r\n");
@@ -353,13 +382,15 @@ static void dump_record(char *buffer, unsigned long int len)
 	}
 }
 
-unsigned long int   main(unsigned long int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	char				*dataBuffer				= NULL;
 	unsigned long int	dbLen					= MAX_REC_BUFFER_SIZE;
 	unsigned long int	retval					= NO_ERROR;
 	unsigned long int	recCnt					= 0L;
-	CLIENT_STRUCT		clientID				= {0};
+	CLIENT_STRUCT		clientID;
+
+	memset (&clientID, 0x00, sizeof(CLIENT_STRUCT));
  
 	if (argc <=4  || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help")))
 		show_usage_and_exit();
@@ -378,7 +409,7 @@ unsigned long int   main(unsigned long int argc, char *argv[])
 
 	/* Open up the requested file */
 	if ((retval = BF_OPEN (&clientID, (char*)&inFileName)) != NO_ERROR){
-		printf ("File could not be opened (ErrorCode: %u)\n", retval);
+		printf ("File could not be opened (ErrorCode: %u)\n", (unsigned int)retval);
 		goto Exit;
 	}
 	/* 
@@ -401,7 +432,7 @@ unsigned long int   main(unsigned long int argc, char *argv[])
 	}
 	/* now get all the records */
 	while ((retval = BF_GET_REC (&clientID, dataBuffer, &dbLen)) == NO_ERROR){
-		if (!silent_mode ) printf ("Rec: %u - Len: %u \n", ++recCnt, dbLen);
+		if (!silent_mode ) printf ("Rec: %u - Len: %u \n", (unsigned int)++recCnt, (unsigned int) dbLen);
 		dump_record(dataBuffer, dbLen);
 		dbLen = MAX_REC_BUFFER_SIZE;
 	}
@@ -418,5 +449,5 @@ Exit:
 		printf ("press any key to exit the app\n");
 		getch();
 	}
-	return FALSE;
+	return (int)FALSE;
 }

@@ -246,7 +246,7 @@ void	sortPages (CLIENT_STRUCT *cl, char pageType)
 			if(in[cnt2].pId < in[low].pId) 
 				low = cnt2; 
         }
-		memcpy (&tmp, &in[low], sizeof(PAGE_LINK));
+		memcpy ((void*)&tmp, (void*)&in[low], sizeof(PAGE_LINK));
 		memcpy (&in[low], &in[cnt1], sizeof(PAGE_LINK));
 		memcpy (&in[cnt1], &tmp, sizeof(PAGE_LINK));
 	}
@@ -265,9 +265,8 @@ void	sortPages (CLIENT_STRUCT *cl, char pageType)
 */
 unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 {
-	unsigned short int	retval =	0;
-	FCR					lcFCR = {0};  /* local buffer to read the FCR */
-	
+	FCR	lcFCR;  /* local buffer to read the FCR */
+
 	if (!cl) return CLIENT_CONNECTION_ERROR;
 	else memset (cl, 0x00, sizeof(CLIENT_STRUCT));
 
@@ -396,7 +395,7 @@ unsigned short int	getVariableData	(CLIENT_STRUCT *cl, char *dataBuffer, unsigne
 	unsigned long int	pCnt		= 0L;
 	unsigned long int	curLen		= cl->FixRecLen;
 	unsigned long int	pPageOff	= 0L;
-	VRECPTR				Vrec		= {0};
+	VRECPTR				Vrec;
 		
 	/* copy fix data into the provided buffer */
 	if (dataBuffer && *dbLen > 0)
@@ -540,12 +539,12 @@ unsigned short int	BF_GET_REC (CLIENT_STRUCT *cl, char *dataBuffer, unsigned lon
 		if (cl->fVersion >= BTRIEVE_FILE_V6 && *(short*)(cl->curRecAdr +4) != 0x0000){
 			break;
 		}else if (cl->fVersion < BTRIEVE_FILE_V6){
-			  char *	tempPtr = cl->curRecAdr +4;
-			  long int	i		= 0;
+			  char *			tempPtr = cl->curRecAdr +4;
+			  unsigned long int	i		= 0;
 
 			  for (i = cl->IFixedRecLen - 4; i; i--) 
 				  if (*tempPtr++) break;
-			  if ((i == 0) && (( *((long *) cl->curRecAdr) == 0L) || ( *((long *) cl->curRecAdr)  == MAX_LONG_INT_VAL)))
+			  if ((i == 0) && (( *((unsigned long int*) cl->curRecAdr) == 0) || ( *((unsigned long int*) cl->curRecAdr)  == MAX_LONG_INT_VAL)))
 				 continue; 
 			  else 
 				  break;
@@ -588,8 +587,6 @@ unsigned short int	BF_GET_REC (CLIENT_STRUCT *cl, char *dataBuffer, unsigned lon
 */
 unsigned short int	BF_CLOSE (CLIENT_STRUCT *cl)
 {
-	unsigned short int	retval =	0;
-	
 	if (!cl) return CLIENT_CONNECTION_ERROR;
 	return freeClient (cl, NO_ERROR);
 }

@@ -26,6 +26,9 @@
 	#include <windows.h>
 	/* Disable unsafe function warning */
 	#pragma warning( disable : 4996)
+#else
+	#define NO_ERROR 0L
+	#include <string.h>
 #endif 
 
 #include <stdio.h>
