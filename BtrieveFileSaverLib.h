@@ -50,9 +50,14 @@
 #define NO_BTR_FILE						7
 
 /* project defines */
+#define MAX_SINGLE_INT_VAL					0xFF		// single byte int max value
 #define MAX_SHORT_INT_VAL					0xFFFF		// 2 byte int max value
 #define	MAX_LONG_INT_VAL					0xFFFFFFFF	// 4 byte int max value
+
+#define PAGE_KICK_OFF						0xFFFF00FF	// define to overcome the page id at three byte page header
+
 #define	FCR_IDENT							0x00004346	// byte swaped 'FC'
+
 
 /* File type/feature flags */
 #define FTYPE_NEW_FORMAT					0x01		// new file type indicated by 'FC' as FCR page id
@@ -82,6 +87,8 @@
 #define DAT_PAGE_HEADER_SIZE_V6				2
 #define DAT_PAGE_HEADER_SIZE_V8				4
 
+#define PAT_PAGE_HEADER_SIZE_V6				8
+
 /* VREC defines */
 #define VFRAG_CUT_V5						0
 #define VFRAG_CUT_V6						4
@@ -90,6 +97,8 @@
 /* RECORD POINTER SIZE */
 #define DAT_POINTER_SIZE_V6					4
 #define DAT_POINTER_SIZE_V8					6
+
+#define PAT_POINTER_SIZE_V6					4
 
 /* Page identifier */
 #define FCR_PAGE_ID							'F'
@@ -101,9 +110,6 @@
 #define PAGE_SIZE_MULTIPLIER				256			
 #define PAGE_SIZE_STEPPING					512			
 
-/* PAT Header sizes */
-#define PAT_HEADER_SIZE_V7					16
-#define PAT_HEADER_SIZE_V8					24
 
 /* macro definition */
 #define VRPage(x)	(long) (((long) (x).hi << 16) | ((x).mid << 8) | (x).lo)
@@ -116,11 +122,6 @@ typedef struct
 	unsigned char	mid;
 	unsigned char	frag;
 } VRECPTR;
-
-typedef struct{
-	unsigned long int		NumElements;			/* number of elements within this struct */
-	unsigned long int		*Elements;				/* elements itself */
-}PAT_PAGE;
 
 typedef struct{
 	unsigned long int		pId;			/* page id, note that it is 16Bit */
@@ -151,29 +152,38 @@ typedef struct{
 
 typedef struct{
 	FILE					*fHandle;				/* handle to the physical file */
-	short int				fVersion;		/* file version */
-	unsigned short int		fPageSize;		/* the files page size */
-	unsigned long int		curRecordId;	/* counter of records */
-	char					VFragParam;		/* cut/add param for vrec fragments */
-	char					VarRecsAllowed;	/* copy from FCR */
-	unsigned short int		FixRecLen;		/* fixed rec len */
-	unsigned short int		IFixedRecLen;	/* internal phys rec len */
-	char					recHeaderSize;	/* header size of each rec */
-	unsigned long int		curDPageID;		/* Id of the currently in use data page */
-	char					*curRecAdr;		/* currently used record adrress*/
-	unsigned long int		curRecOff;		/* Offset of the current record within the data page */
+	short int				fVersion;				/* file version */
+	unsigned short int		fPageSize;				/* the files page size */
+	unsigned long int		numPointerPerPat;		/* counter of pointers per pat */
+	unsigned long int		numRecs;				/* number of records as saved within the FCR */
+	unsigned long int		curRecordId;			/* counter of records */
+	char					VFragParam;				/* cut/add param for vrec fragments */
+	char					VarRecsAllowed;			/* copy from FCR */
+	unsigned short int		FixRecLen;				/* fixed rec len */
+	unsigned short int		IFixedRecLen;			/* internal phys rec len */
+	char					recHeaderSize;			/* header size of each rec */
+	unsigned long int		curDPageID;				/* Id of the currently in use data page */
+	char					*curRecAdr;				/* currently used record adrress*/
+	unsigned long int		curRecOff;				/* Offset of the current record within the data page */
+	/*
+	*	data container - allocated ressources to hold the temporary used data pages
+	*/
 	char					*CUR_DPAGE;		/* The last used data page */
-	PAGE_LINK				*VATArr;		/* array holding all vat pages */
-	unsigned long int		numVATPages;	/* number of vat pages within the file */
-	PAGE_LINK				*DATArr;		/* array holding all dat pages */
-	unsigned long int		numDATPages;	/* number of Dat pages within the file */
-	char					bFlags;			/* serveral flags for bug tracking */
 	char					*CUR_VPAGE;		/* variable data page buffer */
+	/* 
+	*	local page information 
+	*	The following array's hold the information regarding the found pages.
+	*	DATArr will be sorted by PageID - see BF_OPEN function
+	*/
+	unsigned long int		numVATPages;	/* number of vat pages within the file */
+	PAGE_LINK				*VATArr;		/* array holding all vat pages */
+	unsigned long int		numDATPages;	/* number of Dat pages within the file */
+	PAGE_LINK				*DATArr;		/* array holding all dat pages */
 }CLIENT_STRUCT;
 
 /* Prototyping */
 unsigned short int	BF_OPEN		(CLIENT_STRUCT *cl, char *fName);
-unsigned short int	BF_GET_REC (CLIENT_STRUCT *cl, char *dataBuffer, unsigned long *dbLen);
+unsigned short int	BF_GET_REC	(CLIENT_STRUCT *cl, char *dataBuffer, unsigned long *dbLen);
 unsigned short int	BF_CLOSE	(CLIENT_STRUCT *cl);
 
 #pragma pack(pop)
