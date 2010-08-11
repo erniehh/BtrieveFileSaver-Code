@@ -30,6 +30,12 @@
 	now you are jumping page wise accross the file and store the different page types.
 	Thanks to Andrey Libowsky for the help on the 4096byte information. Only having this
 	information you can jump on 6.x files by multiplying the page size. 
+
+	11th August 2010 - N.Stagno dbcoretech
+	Bug fix - reset GlobalCurPage variable.
+	Prior to this change the tool would not be able to use multiple files in a loop because 
+	the GlobalCurPage variable would not be reset to 0L while opening the new file.
+	Check Line 317 (BF_OPEN)
 	______________________________________________________________________________________
 
 */
@@ -307,6 +313,13 @@ unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 
 	if (!cl) return CLIENT_CONNECTION_ERROR;
 	else memset (cl, 0x00, sizeof(CLIENT_STRUCT));
+
+	/* 
+	*	allways set GlobalCurPage to 0L so that you are reading all 
+	*	pages of the file starting with the very first one.
+	*/
+	GlobalCurPage = 0L;
+
 
 	/* try to open the file */
 	if ((cl->fHandle = fopen (fName, "rb")) == NULL) return IO_ERROR;
