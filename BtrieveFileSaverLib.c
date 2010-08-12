@@ -36,6 +36,12 @@
 	Prior to this change the tool would not be able to use multiple files in a loop because 
 	the GlobalCurPage variable would not be reset to 0L while opening the new file.
 	Check Line 317 (BF_OPEN)
+
+	12. August 2010 - C. Fiedler dbcoretech
+	Bug fix - read and/or extract data from files Version 5.x
+	Prior to this change the tool would not find any data page on files version 5.x because 
+	at the function getPageType the switch wasn't checking for BTRIEVE_FILE_V5
+	Check Line 100 (getPageType)
 	______________________________________________________________________________________
 
 */
@@ -95,7 +101,8 @@ char	getPageType (CLIENT_STRUCT *cl, char *tmpPage)
 {
 	switch (cl->fVersion){
 		case BTRIEVE_FILE_V3:
-		case BTRIEVE_FILE_V4:{
+		case BTRIEVE_FILE_V4:
+		case BTRIEVE_FILE_V5:{
 			if (*(unsigned short int*)(tmpPage + 4) & 0x8000) return DAT_PAGE_ID;
 		}break;
 		case BTRIEVE_FILE_V6:
@@ -218,7 +225,7 @@ unsigned long int GlobalCurPage = 0L;	// global counter for the current page tha
 
 char	getNextPhysicalPage (CLIENT_STRUCT *cl, char* tmpPage)
 {
-	unsigned long int	pageID;
+	unsigned long int	pageID; 
 	char				pType = 0x00;
 
 	pageID = GlobalCurPage++;
