@@ -42,7 +42,27 @@
 	Prior to this change the tool would not find any data page on files version 5.x because 
 	at the function getPageType the switch wasn't checking for BTRIEVE_FILE_V5
 	Check Line 100 (getPageType)
-	______________________________________________________________________________________
+
+	16th August 2010 - N.Stagno dbcoretech
+	Bug fix - read and extract variable data from files Version 3.x/4.x/5.x/6.x
+	Prior to the fix the function has scanned the traced VAR-Pages to find the right 
+	page (using pageID). Now we use a function copied from Jim Kyles code (lp_pp)
+	(Check getVariableData)
+
+	18th August 2010 - C. Fiedler dbcoretech
+	Bug fix reading files version 3.x/4.x/5.x and getting different results compared
+	to BUTIL - SAVE.
+	Prior to the fix the indication that a record is empty was incorrect. Now we scan 
+	the record for any data other then 0x00 starting at the record adress + header
+	(Check  BF_GET_REC). There are many other changes to the code so basically it is 
+	a complete re-writing. we fixed:
+			-	dont read pages where offset is behind the size of file
+			-	dont read pages with offset 0x00 (that is allways the FCR)
+			-	ignore records that are empty (V3,V4,V5)
+			-	change DAT_HEADER_PAGE_V3 
+			-	do not use pages that don't have a usage count
+	many more minor changes too.
+______________________________________________________________________________________
 
 */
 
@@ -225,7 +245,7 @@ unsigned long int GlobalCurPage = 0L;	// global counter for the current page tha
 
 char	getNextPhysicalPage (CLIENT_STRUCT *cl, char* tmpPage)
 {
-	unsigned long int	pageID; 
+	unsigned long int	pageID;
 	char				pType = 0x00;
 
 	pageID = GlobalCurPage++;
@@ -305,7 +325,7 @@ void	sortPages (CLIENT_STRUCT *cl, char pageType)
 
 /*
 *
-*	Function BF_OPEN (Btrieve File Open)
+*	Function BF_OPEN (Btrieve File ReadRecords)
 *	
 *	<input/output>	in				CLIENT_STRUCT pointer, should be NULL and will be used to allocate memory 
 *	<input>			fName			char pointer containing the file that should be read
@@ -318,15 +338,15 @@ unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 {
 	FCR	lcFCR;  /* local buffer to read the FCR */
 
+	/* Reset the GlobalCurPage counter to 0L */
+	GlobalCurPage = 0L;
+
 	if (!cl) return CLIENT_CONNECTION_ERROR;
 	else memset (cl, 0x00, sizeof(CLIENT_STRUCT));
 
-	/* 
-	*	allways set GlobalCurPage to 0L so that you are reading all 
-	*	pages of the file starting with the very first one.
-	*/
-	GlobalCurPage = 0L;
-
+	cl->curRecordId = MAX_LONG_INT_VAL;
+	cl->curRecOff	= MAX_LONG_INT_VAL;
+	cl->curDPageID	= 1; // never start reading pages below 1 (FCR)
 
 	/* try to open the file */
 	if ((cl->fHandle = fopen (fName, "rb")) == NULL) return IO_ERROR;
@@ -339,11 +359,11 @@ unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 	*/
 	if (lcFCR.PageId == 0x00000000){ // <= 5x Format
 		cl->fVersion		= (short)abs (lcFCR.Version);
-		cl->recHeaderSize	= 4;
+		cl->recHeaderSize	= 0;
 
 	}else if (lcFCR.PageId == FCR_IDENT ){			
 		cl->fVersion = (short)abs (lcFCR.NewFileVersion);
-		cl->recHeaderSize = 6;
+		cl->recHeaderSize = 2;
 
 	}else return freeClient (cl, IO_ERROR);
 
@@ -391,6 +411,11 @@ unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 	if ((cl->CUR_DPAGE = (char*) malloc (cl->fPageSize)) == NULL) return IO_ERROR;
 	else *(long*)cl->CUR_DPAGE = 0L;
 
+	/* get the max number of pages */
+	fseek (cl->fHandle, 0, SEEK_END);
+	cl->fNumPages = (ftell (cl->fHandle) / cl->fPageSize);
+	fseek (cl->fHandle, 0, SEEK_SET);
+
 	/* scan the file for existing pages */
 	readAllPagesFromFile (cl);
 	sortPages (cl, DAT_PAGE_ID);
@@ -402,6 +427,52 @@ unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 	}
 
 	return NO_ERROR;
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\
+ *                                                           *
+ *      This procedure converts a Logical Page number to     *
+ *      a file offset, using the PAT for new format files.   *
+ *                                                           *
+\* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+static long int lp_pp(CLIENT_STRUCT *cl, long int lp )
+{ 
+	unsigned long int	ret, pat1, pat2;
+	unsigned short int	u1, u2, pppat;
+
+	if (cl->fVersion > BTRIEVE_FILE_V5){
+		ret = 2;                               // first PAT pair on 2, 3
+		pppat = (cl->fPageSize >> 2) - 2;      // pages per PAT
+
+		while( lp > pppat ){				   // off current page 
+			lp -= pppat;					   //   so tally down index
+			ret += (cl->fPageSize >> 2);       //   up the PAT pp nbr
+		}
+
+		pat1 = ret * (long)cl->fPageSize;      // first PAT of pair
+		pat2 = pat1 + (long)cl->fPageSize;     // second right after it
+		fseek( cl->fHandle, pat1+4L, 0 );      // get both usage counts
+		fread( &u1, 2, 1, cl->fHandle );
+		fseek( cl->fHandle, pat2+4L, 0 );
+		fread( &u2, 2, 1, cl->fHandle );
+		if( u1 > u2 )						   // choose most recent one
+			ret = pat1;
+		else
+			ret = pat2;
+
+		ret += (long)(( lp << 2 ) + 4L );	   // position in PAT
+		fseek( cl->fHandle, ret, 0 );
+		fread( &lp, 4, 1, cl->fHandle );       // read it into LP
+
+		lp = byte_swap( lp );                  // and un-word-swap it
+		lp &= 0xFFFFFFL;
+	}
+
+	if( lp == 0xFFFFFFL || lp == -1L )    // NULL pointer values
+		ret = -1L;
+	else                                  // convert to offset
+		ret = lp * cl->fPageSize;
+	return ret;
 }
 
 /*
@@ -416,12 +487,37 @@ unsigned short int	BF_OPEN (CLIENT_STRUCT *cl, char *fName)
 unsigned short int getNextDataPage (CLIENT_STRUCT *cl)
 { 
 	unsigned short int	retval		= NO_ERROR;
-	if (cl->curDPageID >= cl->numDATPages) return END_OF_FILE;
-	if ((retval = readPageFromFile (cl, cl->CUR_DPAGE, cl->DATArr[cl->curDPageID++].offset)) != NO_ERROR) 
-			return retval;
+	unsigned long int pOff;
+	unsigned long int cPId = cl->curDPageID;
+
+	memset (cl->CUR_DPAGE, 0x00, cl->fPageSize);
+
+	while ((getPageType (cl, cl->CUR_DPAGE)) != DAT_PAGE_ID /*&& cPId < cl->fNumPages-2*/){
+		pOff = lp_pp (cl, cPId++);
+	
+		if (pOff > (cl->fNumPages * cl->fPageSize)) continue;
+
+		if ((retval = readPageFromFile (cl, cl->CUR_DPAGE, pOff)) != NO_ERROR) return retval;
+
+		if (cl->fVersion == BTRIEVE_FILE_V6 && *(unsigned short*)(cl->CUR_DPAGE+2) != cPId -1){
+			*(unsigned long*)cl->CUR_DPAGE = 0L;
+			continue;
+		}
+
+		if (cl->fVersion == BTRIEVE_FILE_V3){
+			unsigned long usage = 0L;
+			((unsigned char*)&usage)[2] = cl->CUR_DPAGE[4];
+			((unsigned char*)&usage)[1] = cl->CUR_DPAGE[6];
+			((unsigned char*)&usage)[0] = cl->CUR_DPAGE[7];
+			if (usage == 0){
+				memset (cl->CUR_DPAGE, 0x00 , 10);
+				continue;
+			}
+		}
+	}
+	cl->curDPageID = cPId;
 	return NO_ERROR;
 }
-
 
 /*
 *
@@ -464,7 +560,7 @@ unsigned short int	getVariableData	(CLIENT_STRUCT *cl, char *dataBuffer, unsigne
 	while (VPageId != PAGE_KICK_OFF && FragId != MAX_SHORT_INT_VAL){
 			
 		/* get the VAT page offset within the file */
-		if (cl->fVersion >= BTRIEVE_FILE_V5){
+		if (cl->fVersion >= BTRIEVE_FILE_V7){
 			pPageOff = MAX_LONG_INT_VAL;
 			for (pCnt = 0l; pCnt < cl->numVATPages; pCnt++){
 				if (cl->VATArr[pCnt].pId == VPageId){
@@ -472,7 +568,8 @@ unsigned short int	getVariableData	(CLIENT_STRUCT *cl, char *dataBuffer, unsigne
 					break;
 				}
 			}
-		}else pPageOff = VPageId * cl->fPageSize;
+		}else 
+			pPageOff = lp_pp (cl, VPageId);
 
 		if (pPageOff != MAX_LONG_INT_VAL || numFrag > 254){
 			short int			fEId		= 0;
@@ -539,19 +636,17 @@ unsigned short int	getVariableData	(CLIENT_STRUCT *cl, char *dataBuffer, unsigne
 signed short int getNextRecord	(CLIENT_STRUCT *cl)
 {
 	signed short int	retval		= NO_ERROR;
-	unsigned long int	numRecs		= 0;
+	unsigned long int	numRecs		= ((cl->fPageSize -2) / cl->IFixedRecLen);
 
-	if (cl->curRecordId >= cl->numRecs) return END_OF_FILE;
-	if (*(long*)cl->CUR_DPAGE != 0L && (numRecs = ((cl->fPageSize -2) / cl->IFixedRecLen)) > (cl->curRecOff)){
-		cl->curRecAdr = (((char*)cl->CUR_DPAGE) 
-							+ ((cl->fVersion >= BTRIEVE_FILE_V8)? DAT_PAGE_HEADER_SIZE_V8 : DAT_PAGE_HEADER_SIZE_V6) 
+	if (cl->curRecordId  != MAX_LONG_INT_VAL && cl->curRecordId >= cl->numRecs-1) return END_OF_FILE;
+	if (numRecs > (cl->curRecOff)){
+		cl->curRecAdr = (((char*)cl->CUR_DPAGE) + ((cl->fVersion >= BTRIEVE_FILE_V8)? DAT_PAGE_HEADER_SIZE_V8 : DAT_PAGE_HEADER_SIZE_V6) 
 							+ (cl->curRecOff * cl->IFixedRecLen));
 		cl->curRecOff++;
 	}else{
 		if ((retval = getNextDataPage (cl)) != NO_ERROR) return retval;
 		else{
-			cl->curRecAdr = (((char*)cl->CUR_DPAGE) 
-								+ ((cl->fVersion >= BTRIEVE_FILE_V8)? DAT_PAGE_HEADER_SIZE_V8 : DAT_PAGE_HEADER_SIZE_V6));
+			cl->curRecAdr = (((char*)cl->CUR_DPAGE)	+ ((cl->fVersion >= BTRIEVE_FILE_V8)? DAT_PAGE_HEADER_SIZE_V8 : DAT_PAGE_HEADER_SIZE_V6));
 			cl->curRecOff = 1;
 		}
 	}
@@ -578,19 +673,26 @@ unsigned short int	BF_GET_REC (CLIENT_STRUCT *cl, char *dataBuffer, unsigned lon
 
 	if (!cl) return CLIENT_CONNECTION_ERROR;
 
+	if (cl->numRecs == 0L) return END_OF_FILE;
 	while ((retval = getNextRecord (cl)) == NO_ERROR){
-		if (cl->fVersion >= BTRIEVE_FILE_V6 && *(short*)(cl->curRecAdr +4) != 0x0000){
+		if (cl->fVersion >= BTRIEVE_FILE_V6 && *(unsigned short*)(cl->curRecAdr) != 0x0000){
 			break;
 		}else if (cl->fVersion < BTRIEVE_FILE_V6){
-			  char *			tempPtr = cl->curRecAdr +4;
-			  unsigned long int	i		= 0;
+			unsigned long int	i		= 0;
+			char				isEmpty	= true;
 
-			  for (i = cl->IFixedRecLen - 4; i; i--) 
-				  if (*tempPtr++) break;
-			  if ((i == 0) && (( *((unsigned long int*) cl->curRecAdr) == 0) || ( *((unsigned long int*) cl->curRecAdr)  == MAX_LONG_INT_VAL)))
-				 continue; 
-			  else 
-				  break;
+			if (cl->fVersion == BTRIEVE_FILE_V3 && *(unsigned short int*)cl->curRecAdr == 0x0000) continue;
+
+			for (i = ((cl->fVersion >= BTRIEVE_FILE_V4)? RECORD_HEADER_SIZE_V4 : RECORD_HEADER_SIZE_V3) ; 
+					i < cl->IFixedRecLen ; i++){ 
+				if (cl->curRecAdr[i]){
+					isEmpty = false;
+					break;
+				}
+			}
+
+			if ((isEmpty == true)) continue;
+			else break;
 		}
 	}
 

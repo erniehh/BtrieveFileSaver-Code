@@ -338,6 +338,20 @@ static void process_command_line_arguments(char *argv[])
 			exit(EXIT_FAILURE);
 }
 
+static void finish_dump()
+{
+	if (!outFile || !fBuffer) return;
+	switch (format){
+		case '1':{ // BUTIL - save format
+			sprintf (fBuffer, "%c",0x1A);
+			fwrite (fBuffer, strlen (fBuffer), 1, outFile);
+		}break;
+		case '2':{ // BUTIL - save format without len at the beginning
+			sprintf (fBuffer, "%c",0x1A);
+			fwrite (fBuffer, strlen (fBuffer), 1, outFile);			
+		}break;
+	}
+}
 static void dump_record(char *buffer, unsigned long int len)
 {
 
@@ -435,13 +449,15 @@ int main(int argc, char *argv[])
 		if (!silent_mode ) printf ("Rec: %u - Len: %u \n", (unsigned int)++recCnt, (unsigned int) dbLen);
 		dump_record(dataBuffer, dbLen);
 		dbLen = MAX_REC_BUFFER_SIZE;
+		if (recCnt == 317)
+			recCnt = recCnt;
 	}
 
 Exit:
 	
 	/* close the file and release all resources */
 	BF_CLOSE (&clientID);
-
+	finish_dump ();
 	if (dataBuffer) free (dataBuffer);
 	if (fBuffer) free (fBuffer);
 	if (outFile) fclose (outFile);

@@ -37,6 +37,16 @@
 #pragma pack(push)
 #pragma pack(1)
 
+#ifndef true
+	#define true 1
+	#define false 0
+#endif
+
+#ifndef bool
+	#define bool char
+#endif
+
+
 /* 
 *	Error Codes used in the project. Note that those are not the Btrieve Error codes! 
 *	The main reason for using own error codes are just the limitations within the Btrieve 
@@ -84,8 +94,11 @@
 #define FCR_BLOBS							0x0800
 
 
-#define DAT_PAGE_HEADER_SIZE_V6				2
+#define DAT_PAGE_HEADER_SIZE_V6				6
 #define DAT_PAGE_HEADER_SIZE_V8				4
+
+#define RECORD_HEADER_SIZE_V3				4
+#define RECORD_HEADER_SIZE_V4				8
 
 #define PAT_PAGE_HEADER_SIZE_V6				8
 
@@ -112,6 +125,7 @@
 
 
 /* macro definition */
+#define ReverseLongInt(x)     ((x) << 16 | (x) >> 16)
 #define VRPage(x)	(long) (((long) (x).hi << 16) | ((x).mid << 8) | (x).lo)
 
 /* struct defines */
@@ -121,7 +135,7 @@ typedef struct
 	unsigned char	lo;
 	unsigned char	mid;
 	unsigned char	frag;
-} VRECPTR;
+}VRECPTR;
 
 typedef struct{
 	unsigned long int		pId;			/* page id, note that it is 16Bit */
@@ -154,6 +168,7 @@ typedef struct{
 	FILE					*fHandle;				/* handle to the physical file */
 	short int				fVersion;				/* file version */
 	unsigned short int		fPageSize;				/* the files page size */
+	unsigned long int		fNumPages;				/* number of pages possible within the file */
 	unsigned long int		numPointerPerPat;		/* counter of pointers per pat */
 	unsigned long int		numRecs;				/* number of records as saved within the FCR */
 	unsigned long int		curRecordId;			/* counter of records */
@@ -176,9 +191,9 @@ typedef struct{
 	*	DATArr will be sorted by PageID - see BF_OPEN function
 	*/
 	unsigned long int		numVATPages;	/* number of vat pages within the file */
-	PAGE_LINK				*VATArr;		/* array holding all vat pages */
+	PAGE_LINK		*VATArr;		/* array holding all vat pages */
 	unsigned long int		numDATPages;	/* number of Dat pages within the file */
-	PAGE_LINK				*DATArr;		/* array holding all dat pages */
+	PAGE_LINK		*DATArr;		/* array holding all dat pages */
 }CLIENT_STRUCT;
 
 /* Prototyping */
