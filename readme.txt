@@ -1,3 +1,11 @@
+This Repo is a Clone of https://sourceforge.net/projects/btrievefilesave/
+
+The Main Development is done by dbcoretech.
+
+I cloned the Repo to Fix some Problems with big BTrieve 6.x Files. 
+
+
+
 Btrieve File Saver 
 ------------------
 
